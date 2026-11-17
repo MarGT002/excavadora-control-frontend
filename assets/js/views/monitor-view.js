@@ -97,7 +97,7 @@ export class MonitorView {
   #renderLastTag() {
     const d = this.last;
     if (!d) return;
-    const map = { rest: ['rest', 'REST · estado en RDS'], ws: ['live', 'Evento WSS'], demo: ['demo', 'Evento WSS · DEMO'], initial: ['live', 'WSS · estado inicial'] };
+    const map = { rest: ['rest', 'REST · RDS'], ws: ['live', 'Evento WSS'], demo: ['demo', 'WSS · DEMO'], initial: ['live', 'WSS · inicial'] };
     const [s, text] = map[d.source] ?? ['idle', d.source];
     this.#setTag('last-source', s, text);
   }
@@ -140,7 +140,8 @@ export class MonitorView {
       const rows = await Api.historial(this.histCtrl.signal);
       if (seq !== this.histSeq) return;
       this.#renderRows(rows);
-      this.#setTag('hist-status', 'rest', `${rows.length} de ${CONFIG.HISTORY_LIMIT} · ${formatTime(new Date())}`);
+      this.#setTag('hist-status', 'rest', `${rows.length}/${CONFIG.HISTORY_LIMIT} · RDS`);
+      $('hist-status').title = `Sincronizado con GET /historial a las ${formatTime(new Date())}`;
     } catch (err) {
       if (err.kind === 'abort' || seq !== this.histSeq) return;
       this.#setTag('hist-status', 'error', 'Error');

@@ -10,10 +10,12 @@ import { CONFIG } from './config.js';
 import { bus, appState } from './core/store.js';
 import { catalog } from './core/catalog.js';
 import { connectivity } from './core/connectivity.js';
+import './core/toggle-state.js';
 import { Api } from './services/api.js';
 import { wsClient } from './services/ws.js';
 import { initIndicators } from './ui/indicators.js';
 import { toast } from './ui/toast.js';
+import { initTheme } from './ui/theme.js';
 import { initRouter } from './views/router.js';
 import { ControlView } from './views/control-view.js';
 import { MonitorView } from './views/monitor-view.js';
@@ -21,6 +23,7 @@ import { MonitorView } from './views/monitor-view.js';
 const control = new ControlView();
 const monitor = new MonitorView();
 
+initTheme();
 initIndicators();
 document.getElementById('vehicle-id').textContent = String(CONFIG.VEHICLE_ID);
 

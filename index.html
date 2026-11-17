@@ -1,12 +1,20 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Aplicación web de CONTROL y MONITOREO para la Excavadora IoT (FastAPI en AWS + Amazon RDS).">
-  <meta name="theme-color" content="#14161a">
-  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0d1220">
   <title>Excavadora IoT · Control y Monitoreo</title>
+
+  <!-- Tema guardado antes de pintar (evita parpadeo claro/oscuro) -->
+  <script>
+    try {
+      const t = localStorage.getItem('excavadora.theme')
+        || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.dataset.theme = t;
+    } catch { /* almacenamiento no disponible: tema oscuro */ }
+  </script>
 
   <link rel="icon" type="image/svg+xml" href="./assets/img/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/img/favicon-32.png">
@@ -23,71 +31,60 @@
 <body>
   <a class="skip-link" href="#main">Saltar al contenido</a>
 
-  <!-- ===== Encabezado y navegación ===== -->
+  <!-- ===== Encabezado: marca, indicadores, navegación y tema ===== -->
   <header class="topbar">
-    <div class="container-xl topbar-inner">
+    <div class="topbar-inner">
       <div class="brand">
-        <img src="./assets/img/favicon.svg" alt="" width="36" height="36" class="brand-logo">
+        <img src="./assets/img/favicon.svg" alt="" width="34" height="34" class="brand-logo">
         <div class="brand-text">
           <span class="brand-kicker">Vehículo #<span id="vehicle-id">1</span></span>
           <h1 class="brand-name" id="vehicle-name">Excavadora IoT</h1>
         </div>
       </div>
-      <nav class="viewnav" aria-label="Secciones de la aplicación">
-        <a class="viewnav-link" href="#control" data-view="control" aria-current="page">
-          <i class="bi bi-controller" aria-hidden="true"></i><span>Control</span>
-        </a>
-        <a class="viewnav-link" href="#monitoreo" data-view="monitoreo">
-          <i class="bi bi-activity" aria-hidden="true"></i><span>Monitoreo</span>
-        </a>
-      </nav>
-    </div>
 
-    <!-- Tres indicadores independientes y verificados -->
-    <section class="container-xl status-strip" aria-label="Estado de conectividad">
-      <button type="button" class="status-chip" id="ind-ws" data-state="wait"
-              title="Sesión WSS de este navegador con el servidor. No indica que el vehículo físico esté conectado.">
-        <i class="bi bi-broadcast status-icon" aria-hidden="true"></i>
-        <span class="status-label">WebSocket WSS</span>
-        <span class="status-value" aria-live="polite">Conectando…</span>
-      </button>
-      <div class="status-chip" id="ind-api" data-state="wait"
-           title="Servidor AWS: responde la operación de salud /health. No garantiza que las 21 operaciones funcionen.">
-        <i class="bi bi-cloud status-icon" aria-hidden="true"></i>
-        <span class="status-label">API AWS · 21 servicios</span>
-        <span class="status-value" aria-live="polite">Comprobando…</span>
+      <!-- Tres indicadores independientes y verificados -->
+      <section class="status-strip" aria-label="Estado de conectividad">
+        <button type="button" class="status-chip" id="ind-ws" data-state="wait"
+                title="Sesión WSS de este navegador con el servidor. No indica que el vehículo físico esté conectado. Pulsa para reconectar.">
+          <i class="bi bi-broadcast status-icon" aria-hidden="true"></i>
+          <span class="status-label">WebSocket WSS</span>
+          <span class="status-value" aria-live="polite">Conectando…</span>
+        </button>
+        <div class="status-chip" id="ind-api" data-state="wait"
+             title="Servidor AWS: responde la operación de salud /health. No garantiza que las 21 operaciones funcionen.">
+          <i class="bi bi-cloud status-icon" aria-hidden="true"></i>
+          <span class="status-label">API AWS · 21 servicios</span>
+          <span class="status-value" aria-live="polite">Comprobando…</span>
+        </div>
+        <div class="status-chip" id="ind-db" data-state="none"
+             title="Amazon RDS según el diagnóstico seguro del backend (/health/db).">
+          <i class="bi bi-database status-icon" aria-hidden="true"></i>
+          <span class="status-label">Amazon RDS</span>
+          <span class="status-value" aria-live="polite">Sin verificar</span>
+        </div>
+      </section>
+
+      <div class="topbar-actions">
+        <nav class="viewnav" aria-label="Secciones de la aplicación">
+          <a class="viewnav-link" href="#control" data-view="control" aria-current="page">
+            <i class="bi bi-controller" aria-hidden="true"></i><span>Control</span>
+          </a>
+          <a class="viewnav-link" href="#monitoreo" data-view="monitoreo">
+            <i class="bi bi-activity" aria-hidden="true"></i><span>Monitoreo</span>
+          </a>
+        </nav>
+        <button type="button" class="theme-btn" id="theme-toggle" aria-pressed="false" aria-label="Activar modo claro" title="Cambiar a modo claro">
+          <i class="bi bi-sun-fill" aria-hidden="true"></i>
+        </button>
       </div>
-      <div class="status-chip" id="ind-db" data-state="none"
-           title="Amazon RDS según el diagnóstico seguro del backend (/health/db).">
-        <i class="bi bi-database status-icon" aria-hidden="true"></i>
-        <span class="status-label">Amazon RDS</span>
-        <span class="status-value" aria-live="polite">Sin verificar</span>
-      </div>
-    </section>
+    </div>
   </header>
 
-  <main id="main" class="container-xl app-main" tabindex="-1">
+  <main id="main" class="app-main" tabindex="-1">
 
     <!-- ===================== VISTA CONTROL ===================== -->
-    <section id="view-control" class="view" aria-labelledby="control-title">
+    <section id="view-control" class="view view--control" aria-labelledby="control-title">
       <h2 id="control-title" class="visually-hidden">Control del vehículo</h2>
-
-      <!-- Trazabilidad de la última acción -->
-      <div class="panel trace" aria-live="polite">
-        <div class="trace-main">
-          <i class="bi bi-joystick trace-icon" id="trace-icon" aria-hidden="true"></i>
-          <div class="trace-text">
-            <span class="eyebrow">Última acción</span>
-            <strong id="trace-cmd">Sin acciones</strong>
-          </div>
-        </div>
-        <ol class="trace-steps" aria-label="Fases de la acción">
-          <li id="step-requested" data-s="">Solicitado</li>
-          <li id="step-accepted" data-s="">Aceptado API</li>
-          <li id="step-event" data-s="">Evento WSS</li>
-        </ol>
-        <p class="trace-msg" id="trace-msg">Las fases no confirman movimiento físico de los motores.</p>
-      </div>
 
       <div class="control-grid">
         <!-- Palanca izquierda: orugas -->
@@ -103,29 +100,51 @@
             <span class="stick-knob" aria-hidden="true"></span>
           </div>
           <span class="stick-status" id="drive-status">Neutral</span>
-          <span id="drive-help" class="visually-hidden">Con el foco en la palanca usa las flechas o W A S D. Al soltar se envía DETENER.</span>
+          <span id="drive-help" class="visually-hidden">Con el foco en la palanca usa las flechas o W A S D. Mientras la mantengas, el movimiento continúa. Al soltar se envía DETENER.</span>
         </div>
 
-        <!-- Centro: DETENER y funciones -->
+        <!-- Centro: DETENER, funciones y DEMO -->
         <div class="center-cell">
-          <button type="button" class="btn-stop" id="btn-stop" aria-keyshortcuts="Escape Space">
-            <i class="bi bi-octagon-fill" aria-hidden="true"></i>
-            <span>DETENER</span>
-            <small>Esc / Espacio</small>
+          <button type="button" class="btn-stop" id="btn-stop" aria-keyshortcuts="Escape Space" title="Detener (Esc o Espacio)">
+            <i class="bi bi-stop-circle-fill" aria-hidden="true"></i>
+            <span>Detener</span>
           </button>
+
           <div class="aux-grid" role="group" aria-label="Funciones del vehículo">
-            <button type="button" class="btn-aux" data-command="ENCENDER" disabled>
-              <i class="bi bi-power" aria-hidden="true"></i><span>Encender</span>
+            <button type="button" class="btn-aux" data-command="ENCENDER" data-toggle="power" aria-pressed="false" disabled>
+              <i class="bi bi-power" aria-hidden="true"></i><span>Encender</span><b class="aux-pill" aria-hidden="true">ON</b>
             </button>
-            <button type="button" class="btn-aux" data-command="LUCES" disabled>
-              <i class="bi bi-lightbulb-fill" aria-hidden="true"></i><span>Luces</span>
+            <button type="button" class="btn-aux" data-command="LUCES" data-toggle="lights" aria-pressed="false" disabled>
+              <i class="bi bi-lightbulb-fill" aria-hidden="true"></i><span>Luces</span><b class="aux-pill" aria-hidden="true">ON</b>
             </button>
-            <button type="button" class="btn-aux" data-command="BOCINA" disabled>
-              <i class="bi bi-megaphone-fill" aria-hidden="true"></i><span>Bocina</span>
+            <button type="button" class="btn-aux" data-command="BOCINA" data-toggle="horn" aria-pressed="false" disabled>
+              <i class="bi bi-megaphone-fill" aria-hidden="true"></i><span>Bocina</span><b class="aux-pill" aria-hidden="true">ON</b>
             </button>
             <button type="button" class="btn-aux" data-command="DEMO" disabled>
               <i class="bi bi-stars" aria-hidden="true"></i><span>Demo integrada</span>
             </button>
+          </div>
+
+          <!-- DEMO almacenadas -->
+          <div class="demo" role="group" aria-labelledby="demo-title">
+            <div class="demo-head">
+              <span id="demo-title" class="demo-title"><i class="bi bi-collection-play" aria-hidden="true"></i> Secuencia DEMO</span>
+              <span class="tag" id="demo-phase" data-s="idle">Lista</span>
+            </div>
+            <div class="demo-row">
+              <label for="demo-select" class="visually-hidden">Seleccionar DEMO</label>
+              <select id="demo-select" class="form-select" disabled>
+                <option value="">Cargando DEMO…</option>
+              </select>
+              <button type="button" class="btn-demo btn-demo--start" id="btn-demo-start" disabled aria-label="Iniciar DEMO">
+                <i class="bi bi-play-fill" aria-hidden="true"></i><span>Iniciar</span>
+              </button>
+              <button type="button" class="btn-demo btn-demo--cancel" id="btn-demo-cancel" disabled aria-label="Cancelar DEMO">
+                <i class="bi bi-x-lg" aria-hidden="true"></i><span>Cancelar</span>
+              </button>
+            </div>
+            <div class="demo-progress" aria-hidden="true"><span id="demo-bar"></span></div>
+            <p class="demo-msg" id="demo-msg" aria-live="polite">Elige una DEMO almacenada.</p>
           </div>
         </div>
 
@@ -142,104 +161,72 @@
             <span class="stick-knob" aria-hidden="true"></span>
           </div>
           <span class="stick-status" id="arm-status">Neutral</span>
-          <span id="arm-help" class="visually-hidden">Con el foco en la palanca usa las flechas o I J K L. Arriba sube el brazo, abajo lo baja, izquierda abre la pala, derecha la cierra. Al soltar se envía DETENER.</span>
+          <span id="arm-help" class="visually-hidden">Con el foco en la palanca usa las flechas o I J K L. Arriba sube el brazo, abajo lo baja, izquierda abre la pala, derecha la cierra. Mientras la mantengas, el movimiento continúa. Al soltar se envía DETENER.</span>
         </div>
       </div>
-
-      <!-- DEMO -->
-      <div class="panel demo" aria-labelledby="demo-title">
-        <div class="panel-head">
-          <h3 id="demo-title" class="panel-title"><i class="bi bi-collection-play" aria-hidden="true"></i> Secuencias DEMO</h3>
-          <span class="tag" id="demo-phase" data-s="idle">Lista</span>
-        </div>
-        <div class="demo-row">
-          <label for="demo-select" class="visually-hidden">Seleccionar DEMO</label>
-          <select id="demo-select" class="form-select" disabled>
-            <option value="">Cargando DEMO…</option>
-          </select>
-          <button type="button" class="btn-demo btn-demo--start" id="btn-demo-start" disabled>
-            <i class="bi bi-play-fill" aria-hidden="true"></i><span>Iniciar</span>
-          </button>
-          <button type="button" class="btn-demo btn-demo--cancel" id="btn-demo-cancel" disabled>
-            <i class="bi bi-x-octagon" aria-hidden="true"></i><span>Cancelar</span>
-          </button>
-        </div>
-        <div class="demo-progress" aria-hidden="true"><span id="demo-bar"></span></div>
-        <p class="demo-msg" id="demo-msg" aria-live="polite">Elige una DEMO almacenada. Su secuencia la ejecuta el servidor.</p>
-      </div>
-
-      <details class="panel wslog">
-        <summary><i class="bi bi-code-slash" aria-hidden="true"></i> Último evento WSS recibido <span id="wslog-time" class="mono">—</span></summary>
-        <pre id="wslog" class="mono">Sin eventos todavía.</pre>
-      </details>
     </section>
 
     <!-- ===================== VISTA MONITOREO ===================== -->
-    <section id="view-monitoreo" class="view" aria-labelledby="monitor-title" hidden>
-      <div class="monitor-head">
-        <h2 id="monitor-title" class="section-title">Monitoreo en tiempo real</h2>
-        <button type="button" class="btn-ghost" id="btn-resync">
-          <i class="bi bi-arrow-clockwise" aria-hidden="true"></i><span>Resincronizar</span>
-        </button>
-      </div>
+    <section id="view-monitoreo" class="view view--monitor" aria-labelledby="monitor-title" hidden>
+      <h2 id="monitor-title" class="visually-hidden">Monitoreo en tiempo real</h2>
 
-      <div class="monitor-grid">
-        <!-- Último movimiento -->
-        <article class="panel last-move" id="last-move" data-source="none" aria-labelledby="last-title">
-          <div class="panel-head">
-            <h3 id="last-title" class="panel-title">Último movimiento reportado</h3>
-            <span class="tag" id="last-source" data-s="idle">Cargando…</span>
-          </div>
-          <div class="last-body">
-            <div class="last-icon"><i class="bi bi-hourglass-split" id="last-icon" aria-hidden="true"></i></div>
-            <div class="last-info">
-              <strong class="last-cmd" id="last-cmd">Cargando…</strong>
-              <span class="last-code mono" id="last-code"></span>
-            </div>
+      <!-- Último movimiento -->
+      <article class="panel last-move" id="last-move" data-source="none" aria-labelledby="last-title">
+        <div class="panel-head">
+          <h3 id="last-title" class="panel-title"><i class="bi bi-broadcast-pin" aria-hidden="true"></i> Último movimiento</h3>
+          <span class="tag" id="last-source" data-s="idle">Cargando…</span>
+        </div>
+        <div class="last-body">
+          <div class="last-icon"><i class="bi bi-hourglass-split" id="last-icon" aria-hidden="true"></i></div>
+          <div class="last-info">
+            <strong class="last-cmd" id="last-cmd">Cargando…</strong>
+            <span class="last-code mono" id="last-code"></span>
           </div>
           <dl class="last-meta">
-            <div><dt>Vehículo</dt><dd id="last-vehicle">—</dd></div>
+            <div class="meta-vehicle"><dt>Vehículo</dt><dd id="last-vehicle">—</dd></div>
             <div><dt>Fecha</dt><dd id="last-date" class="mono">—</dd></div>
             <div><dt>Hora</dt><dd id="last-time" class="mono">—</dd></div>
             <div><dt>Recibido</dt><dd id="last-rel">—</dd></div>
           </dl>
-          <p class="note" id="last-note">«Reportado» significa publicado por el backend; no confirma ejecución física.</p>
-        </article>
+        </div>
+        <p class="note" id="last-note">«Reportado» = publicado por el backend; no confirma ejecución física.</p>
+      </article>
 
-        <!-- Historial -->
-        <article class="panel history" aria-labelledby="hist-title">
-          <div class="panel-head">
-            <h3 id="hist-title" class="panel-title">Últimos 10 movimientos individuales</h3>
+      <!-- Historial -->
+      <article class="panel history" aria-labelledby="hist-title">
+        <div class="panel-head">
+          <h3 id="hist-title" class="panel-title"><i class="bi bi-list-ol" aria-hidden="true"></i> Últimos 10 movimientos</h3>
+          <div class="panel-tools">
             <span class="tag" id="hist-status" data-s="idle">Cargando…</span>
+            <button type="button" class="icon-btn" id="btn-resync" aria-label="Resincronizar estado e historial" title="Resincronizar">
+              <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+            </button>
           </div>
-          <div class="table-wrap">
-            <table class="hist-table">
-              <caption class="visually-hidden">Movimientos individuales persistidos en Amazon RDS, del más reciente al más antiguo</caption>
-              <thead>
-                <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">Movimiento</th>
-                  <th scope="col">Fecha</th>
-                  <th scope="col">Hora</th>
-                  <th scope="col" class="col-id">ID</th>
-                </tr>
-              </thead>
-              <tbody id="hist-body">
-                <tr class="hist-empty"><td colspan="5">Cargando historial…</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="note">Fuente: <span class="mono">GET /historial</span> (RDS). Los pasos internos de una DEMO no se guardan aquí.</p>
-        </article>
-      </div>
+        </div>
+        <div class="table-wrap">
+          <table class="hist-table">
+            <caption class="visually-hidden">Movimientos individuales persistidos en Amazon RDS, del más reciente al más antiguo</caption>
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Movimiento</th>
+                <th scope="col">Fecha</th>
+                <th scope="col">Hora</th>
+                <th scope="col" class="col-id">ID</th>
+              </tr>
+            </thead>
+            <tbody id="hist-body">
+              <tr class="hist-empty"><td colspan="5">Cargando historial…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">Individuales persistidos en RDS. Los pasos internos de una DEMO no se guardan aquí.</p>
+      </article>
     </section>
   </main>
 
   <footer class="app-footer">
-    <div class="container-xl footer-inner">
-      <span>Desarrollado por <strong>Mario García Terrazas</strong> · 2026</span>
-      <span class="footer-sub">Implementación de soluciones IoT · CONTROL + MONITOREO</span>
-    </div>
+    <span>Desarrollado por <strong>Mario García Terrazas</strong> · 2026</span>
   </footer>
 
   <div class="toast-zone" id="toast-zone" role="status" aria-live="polite"></div>
