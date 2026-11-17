@@ -1,7 +1,12 @@
 /** Avisos breves y accesibles (texto plano; nunca HTML remoto). */
+const recent = new Map();   // evita repetir el mismo aviso en ráfaga (p. ej. reenvíos de palanca)
+
 export function toast(message, kind = 'info', ms = 3200) {
   const zone = document.getElementById('toast-zone');
-  if (!zone) return;
+  if (!zone || !message) return;
+  const now = Date.now();
+  if (now - (recent.get(message) ?? 0) < 2500) return;
+  recent.set(message, now);
   const el = document.createElement('div');
   el.className = `toast-msg toast-msg--${kind}`;
   const icon = document.createElement('i');

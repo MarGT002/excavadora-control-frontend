@@ -42,7 +42,10 @@ export const CONFIG = Object.freeze({
     BUILTIN_DEMO: 'DEMO'
   }),
 
-  ORIGEN: 'WEB_CONTROL',          // campo "origen" del POST de movimiento (máx. 30 caracteres)
+  ORIGEN: 'WEB_CONTROL',
+  // Palanca sostenida: reenvía la dirección activa cada N ms (el ESP8266 mantiene cada orden ~1000 ms),
+  // así el movimiento es continuo hasta soltar o cambiar de dirección, como un control de consola.
+  HOLD_REPEAT_MS: 600,          // campo "origen" del POST de movimiento (máx. 30 caracteres)
   TIMEOUT_MS: 6000,
   HEALTH_INTERVAL_MS: 20000,      // verificación moderada de API/RDS
   HISTORY_LIMIT: 10,

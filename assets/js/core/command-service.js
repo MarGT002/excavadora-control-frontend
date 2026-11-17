@@ -56,9 +56,10 @@ class CommandService {
 
   /**
    * @param {string} name nombre del comando en el catálogo (p. ej. 'AVANZAR')
-   * @param {{source:'drive'|'arm'|'button'|'stop'}} opts
+   * @param {{source:'drive'|'arm'|'button'|'stop', repeat?:boolean}} opts
+   *        repeat = reenvío periódico de una palanca sostenida (se omite si hay uno en vuelo).
    */
-  send(name, { source = 'button' } = {}) {
+  send(name, { source = 'button', repeat = false } = {}) {
     name = String(name).toUpperCase();
     const cmd = catalog.get(name);
     if (!cmd) { this.#trace(name, 'blocked', 'Comando no disponible en el catálogo'); return false; }
@@ -69,12 +70,13 @@ class CommandService {
       this.#dispatch(cmd, this.#gen);
       return true;
     }
-    if (appState.demoRunning) { this.#trace(name, 'blocked', 'DEMO en curso: usa Cancelar o DETENER'); return false; }
+    if (appState.demoRunning) { if (!repeat) this.#trace(name, 'blocked', 'DEMO en curso: usa Cancelar o DETENER'); return false; }
     if (this.#owner && this.#owner !== source) {
       this.#trace(name, 'blocked', source === 'button' ? 'Suelta la palanca para usar los botones' : 'La otra palanca está en uso');
       return false;
     }
     if (this.#inFlight) {
+      if (repeat) return 'skipped';                       // nunca se acumulan reenvíos
       if (source === 'drive' || source === 'arm') { this.#pending = { cmd, gen: this.#gen }; return 'queued'; }
       this.#trace(name, 'blocked', 'Espera la respuesta anterior');
       return false;

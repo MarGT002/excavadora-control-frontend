@@ -3,10 +3,11 @@ import { bus, appState } from '../core/store.js';
 import { catalog } from '../core/catalog.js';
 import { commands } from '../core/command-service.js';
 import { demos } from '../core/demo-service.js';
+import { toggles } from '../core/toggle-state.js';
 import { Api } from '../services/api.js';
 import { Joystick } from '../ui/joystick.js';
 import { toast } from '../ui/toast.js';
-import { commandLabel, commandIcon, formatTime, parseDate } from '../utils/format.js';
+import { commandLabel } from '../utils/format.js';
 
 const C = CONFIG.COMMANDS;
 const $ = (id) => document.getElementById(id);
@@ -25,30 +26,35 @@ const STICKS = {
   }
 };
 
+const PHASE_TEXT = { requested: 'solicitado', accepted: 'aceptado por API', event: 'evento WSS recibido', error: 'error' };
+
 export class ControlView {
   constructor() {
     this.sticks = {};
+    this.repeatTimers = {};
     this.auxButtons = [...document.querySelectorAll('.btn-aux')];
     this.demoList = [];
-    this.lastSeq = 0;
     this.#initSticks();
     this.#initButtons();
     this.#initDemo();
-    this.#initTrace();
-    this.#initWsLog();
+    this.#initFeedback();
     bus.on('catalog:loaded', () => this.#syncEnabled());
     bus.on('cmd:owner', () => this.#syncEnabled());
+    bus.on('toggles:changed', (s) => this.#renderToggles(s));
+    this.#renderToggles(toggles.state);
   }
 
-  /** Suelta ambas palancas (al cambiar de vista o perder el foco). */
+  /** Suelta ambas palancas (al cambiar de vista, iniciar DEMO o pulsar DETENER). */
   releaseAll() {
     Object.values(this.sticks).forEach((s) => s.release());
   }
 
-  // ---------- Palancas ----------
+  // ---------- Palancas (movimiento continuo mientras se sostienen) ----------
   #initSticks() {
     for (const [owner, cfg] of Object.entries(STICKS)) {
       const statusEl = $(cfg.status);
+      const stopRepeat = () => { clearInterval(this.repeatTimers[owner]); this.repeatTimers[owner] = null; };
+
       const stick = new Joystick($(cfg.el), {
         keys: cfg.keys,
         canStart: () => {
@@ -58,13 +64,19 @@ export class ControlView {
           return true;
         },
         onChange: (dir) => {
+          stopRepeat();
           if (dir) {
             const name = cfg.map[dir];
             statusEl.textContent = commandLabel(name);
+            statusEl.dataset.cmd = name;
             commands.send(name, { source: owner });
+            // Mientras la palanca siga en esta dirección, se reafirma el comando (control tipo consola).
+            this.repeatTimers[owner] = setInterval(() => commands.send(name, { source: owner, repeat: true }), CONFIG.HOLD_REPEAT_MS);
             return;
           }
           statusEl.textContent = 'Neutral';
+          delete statusEl.dataset.cmd;
+          delete statusEl.dataset.phase;
           if (dir === null) commands.send(C.STOP, { source: owner });   // regreso al centro => DETENER
           if (!stick.active) commands.release(owner);
         }
@@ -73,7 +85,7 @@ export class ControlView {
     }
   }
 
-  // ---------- DETENER y botones ----------
+  // ---------- DETENER y funciones ----------
   #initButtons() {
     $('btn-stop').addEventListener('click', () => this.stopAll());
     document.addEventListener('keydown', (e) => {
@@ -87,15 +99,14 @@ export class ControlView {
 
     this.auxButtons.forEach((btn) => {
       btn.addEventListener('click', () => {
-        const name = btn.dataset.command;
         btn.dataset.s = 'sending';
-        commands.send(name, { source: 'button' });
+        commands.send(btn.dataset.command, { source: 'button' });
       });
     });
   }
 
-  /** DETENER: prioridad absoluta. Cancela la DEMO (si corre) y envía DETENER. */
-  async stopAll() {
+  /** DETENER: prioridad absoluta. Suelta palancas, cancela la DEMO (si corre) y envía DETENER. */
+  stopAll() {
     this.releaseAll();
     const btn = $('btn-stop');
     btn.classList.add('is-firing');
@@ -104,12 +115,21 @@ export class ControlView {
     commands.send(C.STOP, { source: 'stop' });
   }
 
+  #renderToggles(s) {
+    this.auxButtons.forEach((b) => {
+      const key = b.dataset.toggle;
+      if (!key) return;
+      const on = Boolean(s[key]);
+      b.setAttribute('aria-pressed', String(on));
+      b.title = `${catalog.get(b.dataset.command)?.descripcion || commandLabel(b.dataset.command)} · ${on ? 'activo' : 'inactivo'} (estado estimado)`;
+    });
+  }
+
   #syncEnabled() {
     const owner = commands.owner;
     const demoOn = appState.demoRunning;
     this.auxButtons.forEach((b) => {
       b.disabled = !catalog.has(b.dataset.command) || demoOn || Boolean(owner);
-      b.title = catalog.get(b.dataset.command)?.descripcion || '';
     });
     for (const [name, stick] of Object.entries(this.sticks)) {
       const blocked = demoOn || !catalog.loaded || (owner && owner !== name);
@@ -117,68 +137,51 @@ export class ControlView {
       stick.el.setAttribute('aria-disabled', String(Boolean(blocked)));
     }
     $('btn-stop').disabled = !catalog.has(C.STOP);
+    this.#renderToggles(toggles.state);
   }
 
-  // ---------- Trazabilidad ----------
-  #initTrace() {
-    const steps = { requested: $('step-requested'), accepted: $('step-accepted'), event: $('step-event') };
-    const setStep = (k, s) => { steps[k].dataset.s = s; };
-
+  // ---------- Retroalimentación: solicitado → aceptado API → evento WSS ----------
+  #initFeedback() {
     bus.on('cmd:trace', (t) => {
       if (t.phase === 'blocked') { toast(t.msg, 'warn'); this.#markAux(t.name, ''); return; }
-      if (t.seq < this.lastSeq) return;        // ignora fases de acciones ya superadas
-      if (t.phase === 'requested') {
-        this.lastSeq = t.seq;
-        $('trace-cmd').textContent = commandLabel(t.name);
-        $('trace-icon').className = `bi ${commandIcon(t.name)} trace-icon`;
-        $('trace-icon').closest('.trace').dataset.cmd = t.name === C.STOP ? 'stop' : '';
-        setStep('requested', 'active'); setStep('accepted', 'pending'); setStep('event', 'pending');
-        $('trace-msg').textContent = 'Solicitud enviada a la API…';
-      }
-      if (t.seq !== this.lastSeq) return;
-      if (t.phase === 'accepted') {
-        setStep('requested', 'done'); setStep('accepted', 'done');
-        if (steps.event.dataset.s !== 'done') setStep('event', 'active');
-        $('trace-msg').textContent = 'HTTP 201: registrado por la API. No confirma movimiento físico.';
-        this.#markAux(t.name, 'ok');
-      } else if (t.phase === 'event') {
-        setStep('requested', 'done'); setStep('event', 'done');
-        $('trace-msg').textContent = `Evento WSS «movimiento» recibido ${t.at ? `(${formatTime(parseDate(t.at))})` : ''}.`;
-      } else if (t.phase === 'error') {
-        setStep('accepted', 'error'); setStep('event', '');
-        $('trace-msg').textContent = `Error: ${t.msg}`;
+
+      // Punto de fase junto al estado de la palanca que está enviando ese comando
+      document.querySelectorAll(`.stick-status[data-cmd="${CSS.escape(t.name)}"]`).forEach((el) => {
+        if (!PHASE_TEXT[t.phase]) return;
+        if (t.phase === 'accepted' && el.dataset.phase === 'event') return;   // el evento WSS puede llegar antes que el HTTP 201
+        el.dataset.phase = t.phase;
+        el.title = `${commandLabel(t.name)}: ${PHASE_TEXT[t.phase]}`;
+      });
+
+      if (t.phase === 'requested') this.#markAux(t.name, 'sending', false);
+      else if (t.phase === 'accepted' || t.phase === 'event') this.#markAux(t.name, '');
+      else if (t.phase === 'error') {
         toast(`${commandLabel(t.name)}: ${t.msg}`, 'error');
         this.#markAux(t.name, 'error');
-      } else if (t.phase === 'superseded') {
-        setStep('accepted', 'done');
-        $('trace-msg').textContent = 'Respuesta tardía ignorada: DETENER tiene prioridad.';
       }
     });
   }
 
-  #markAux(name, state) {
+  #markAux(name, state, autoClear = true) {
     const btn = this.auxButtons.find((b) => b.dataset.command === name);
     if (!btn) return;
     btn.dataset.s = state;
-    if (state) setTimeout(() => { if (btn.dataset.s === state) btn.dataset.s = ''; }, 1200);
+    if (state && autoClear) setTimeout(() => { if (btn.dataset.s === state) btn.dataset.s = ''; }, 1500);
   }
 
   // ---------- DEMO ----------
   #initDemo() {
     const select = $('demo-select');
-    const start = $('btn-demo-start');
-    const cancel = $('btn-demo-cancel');
-
-    select.addEventListener('change', () => this.#renderDemo(demos.state));
-    start.addEventListener('click', () => {
+    select.addEventListener('change', () => this.#renderDemo(demos.state, false));
+    $('btn-demo-start').addEventListener('click', () => {
       const demo = this.demoList.find((d) => String(d.id) === select.value);
       if (demo) { this.releaseAll(); demos.start(demo); }
     });
-    cancel.addEventListener('click', async () => {
+    $('btn-demo-cancel').addEventListener('click', async () => {
       const ok = await demos.cancel();
       if (ok) commands.send(C.STOP, { source: 'stop' });
     });
-    bus.on('demo:state', (s) => { this.#renderDemo(s); this.#syncEnabled(); });
+    bus.on('demo:state', (s) => { this.#renderDemo(s, true); this.#syncEnabled(); });
   }
 
   async loadDemos() {
@@ -191,40 +194,31 @@ export class ControlView {
       select.replaceChildren(...opts);                  // Option() usa texto plano: sin inyección HTML
       if (this.demoList.length === 1) select.value = String(this.demoList[0].id);
     } catch (e) {
-      select.replaceChildren(new Option('No se pudieron cargar las DEMO', ''));
+      select.replaceChildren(new Option('No se pudieron cargar', ''));
       toast(`DEMO: ${e.message}`, 'error');
     }
-    this.#renderDemo(demos.state);
+    this.#renderDemo(demos.state, false);
   }
 
-  #renderDemo(s) {
+  #renderDemo(s, notify) {
     const running = ['starting', 'running', 'cancelling'].includes(s.phase);
     const select = $('demo-select');
     select.disabled = running || !this.demoList.length;
     $('btn-demo-start').disabled = running || !select.value;
     $('btn-demo-cancel').disabled = !running || s.phase === 'cancelling';
 
-    const labels = { idle: 'Lista', starting: 'Iniciando', running: 'En ejecución', cancelling: 'Cancelando',
+    const labels = { idle: 'Lista', starting: 'Iniciando', running: 'En curso', cancelling: 'Cancelando',
       done: 'Finalizada', cancelled: 'Cancelada', error: 'Error', unknown: 'Desconocido' };
     const tag = $('demo-phase');
-    tag.textContent = labels[s.phase] ?? s.phase;
+    tag.textContent = s.total && running ? `Paso ${s.orden}/${s.total}` : (labels[s.phase] ?? s.phase);
     tag.dataset.s = s.phase;
 
     const pct = s.total ? Math.min(100, Math.round((s.orden / s.total) * 100)) : (running ? 4 : 0);
-    $('demo-bar').style.width = `${['done'].includes(s.phase) ? 100 : pct}%`;
+    $('demo-bar').style.width = `${s.phase === 'done' ? 100 : pct}%`;
     $('demo-bar').parentElement.dataset.s = s.phase;
-    const step = s.total && running ? ` · paso ${s.orden}/${s.total}` : '';
-    $('demo-msg').textContent = `${s.nombre ? `${s.nombre}: ` : ''}${s.message || 'Elige una DEMO almacenada.'}${step}`;
-    if (['done', 'cancelled', 'error', 'unknown'].includes(s.phase)) {
+    $('demo-msg').textContent = s.message || 'Elige una DEMO almacenada.';
+    if (notify && ['done', 'cancelled', 'error', 'unknown'].includes(s.phase)) {
       toast(s.message, s.phase === 'done' ? 'ok' : s.phase === 'cancelled' ? 'info' : 'error');
     }
-  }
-
-  // ---------- Último evento WSS (evidencia) ----------
-  #initWsLog() {
-    bus.on('ws:message', (m) => {
-      $('wslog').textContent = JSON.stringify(m.raw, null, 2);   // textContent: sin inyección
-      $('wslog-time').textContent = formatTime(parseDate(m.timestamp) ?? new Date());
-    });
   }
 }
