@@ -20,12 +20,27 @@ export class Joystick {
     this.onChange = onChange;
     this.pointerId = null;
     this.keyDir = null;
+    this.extDir = null;          // dirección impuesta por el control físico (gamepad)
     this.dir = null;
     this.disabled = false;
     this.#bind();
   }
 
-  get active() { return this.pointerId !== null || this.keyDir !== null; }
+  get active() { return this.pointerId !== null || this.keyDir !== null || this.extDir !== null; }
+
+  /**
+   * Dirección desde un control físico: misma lógica que el gesto táctil (mismos permisos, envío y DETENER al soltar).
+   * dir = 'up'|'down'|'left'|'right' o null (stick en reposo).
+   */
+  setExternal(dir) {
+    if (this.disabled || this.pointerId !== null || this.keyDir !== null) return;
+    if (dir === null) { if (this.extDir !== null) this.release(); return; }
+    if (this.extDir === null && !this.canStart()) { this.#shake(); return; }
+    this.extDir = dir;
+    this.el.classList.add('is-active');
+    this.#placeKnob(dir);
+    this.#setDir(dir);
+  }
 
   setDisabled(v) {
     this.disabled = v;
@@ -120,6 +135,7 @@ export class Joystick {
     const wasActive = this.active || this.dir !== null;
     this.pointerId = null;
     this.keyDir = null;
+    this.extDir = null;
     this.el.classList.remove('is-active');
     this.knob.style.transform = '';
     if (wasActive) {
