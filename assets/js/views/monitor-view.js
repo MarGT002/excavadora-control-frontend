@@ -1,6 +1,7 @@
 import { CONFIG } from '../config.js';
 import { bus, appState } from '../core/store.js';
 import { Api } from '../services/api.js';
+import { vehicle } from '../core/vehicle.js';
 import { toast } from '../ui/toast.js';
 import { commandLabel, commandIcon, parseDate, formatDate, formatTime, relativeTime } from '../utils/format.js';
 
@@ -30,14 +31,35 @@ export class MonitorView {
     $('btn-resync').addEventListener('click', () => this.refresh());
     bus.on('ws:message', (m) => this.#onWs(m));
     bus.on('ws:reconnected', () => this.refresh());
+    bus.on('vehicle:changed', () => { this.reset(); if (!document.getElementById('view-monitoreo').hidden) this.refresh(); });
     bus.on('ws:status', (s) => this.#onWsStatus(s));
     setInterval(() => this.#renderRelative(), 15000);
   }
 
   /** Carga/resincronización completa por REST (al abrir, al reconectar WSS o manualmente). */
   refresh() {
+    if (!vehicle.current) {
+      this.#renderLast(null);
+      this.#renderMessage('Selecciona una unidad para ver su historial.');
+      this.#setTag('hist-status', 'idle', 'Sin unidad');
+      return;
+    }
+    $('last-vehicle').textContent = vehicle.current.nombre || '—';
     this.#loadEstado();
     this.#loadHistorial();
+  }
+
+  /** Al cambiar de unidad se descarta todo lo de la anterior (sin mezclar eventos ni filas). */
+  reset() {
+    this.last = null;
+    this.lastEventAt = 0;
+    this.rows = [];
+    this.knownIds = new Set();
+    this.firstLoad = true;
+    this.estadoSeq++;
+    this.histSeq++;
+    this.histCtrl?.abort();
+    clearTimeout(this.resyncTimer);
   }
 
   // ---------- Último movimiento ----------

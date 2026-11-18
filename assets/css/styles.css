@@ -100,7 +100,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; height: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; height: 100%; overflow: hidden; }
 
 /* La aplicación ocupa exactamente la ventana: encabezado / contenido / pie */
 body {
@@ -133,6 +133,7 @@ body {
    Encabezado
    ========================================================= */
 .topbar {
+  position: relative; z-index: 30;      /* el menú de usuario queda por encima del contenido */
   background: color-mix(in srgb, var(--bg-2) 88%, transparent);
   border-bottom: 1px solid var(--line);
   padding: calc(6px + env(safe-area-inset-top)) var(--pad) 6px;
@@ -144,9 +145,9 @@ body {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas: "brand actions" "status status";
 }
-.brand { grid-area: brand; display: flex; align-items: center; gap: 9px; min-width: 0; }
+.brand { grid-area: brand; display: flex; align-items: center; gap: 9px; min-width: 0; overflow: hidden; }
 .brand-logo { flex: none; border-radius: 9px; }
-.brand-text { display: flex; flex-direction: column; min-width: 0; }
+.brand-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .brand-kicker {
   font-family: var(--font-display); font-size: .68rem; letter-spacing: .14em; text-transform: uppercase;
   background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 600;
@@ -205,6 +206,7 @@ button.status-chip { cursor: pointer; }
    Contenido
    ========================================================= */
 .app-main {
+  position: relative;               /* contiene a los elementos absolutos (no extienden la página) */
   min-height: 0; overflow: auto;   /* solo desplaza en pantallas diminutas como último recurso */
   padding: var(--pad); outline: none;
 }
@@ -499,7 +501,6 @@ button.status-chip { cursor: pointer; }
 /* Teléfonos muy angostos */
 @media (max-width: 400px) {
   .viewnav-link { padding: 0 8px; }
-  .viewnav-link .bi { display: none; }
   .status-icon { display: none; }
   .status-chip { grid-template-columns: minmax(0, 1fr); padding: 4px 6px; }
   .status-label { font-size: .56rem; }
@@ -511,7 +512,9 @@ button.status-chip { cursor: pointer; }
 /* Celulares en vertical: encabezado y monitoreo compactos para que las 10 filas quepan */
 @media (max-width: 575.98px) {
   .viewnav-link { padding: 0 9px; font-size: .84rem; letter-spacing: .04em; }
-  .viewnav-link .bi { display: none; }
+  /* Solo la sección activa muestra su nombre; las demás, icono (el nombre sigue disponible para lectores de pantalla). */
+  .viewnav-link:not([aria-current]) span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .viewnav-link[aria-current] .bi { display: none; }
   .theme-btn { width: 40px; height: 40px; }
   .brand-name { font-size: 1.02rem; }
   .brand-logo { width: 30px; height: 30px; }

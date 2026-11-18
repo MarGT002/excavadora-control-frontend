@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Aplicación web de CONTROL y MONITOREO para la Excavadora IoT (FastAPI en AWS + Amazon RDS).">
-  <meta name="theme-color" content="#0d1220">
-  <title>Excavadora IoT · Control y Monitoreo</title>
+  <meta name="description" content="Plataforma IoT de la Excavadora: CONTROL, MONITOREO y ADMINISTRACIÓN (FastAPI en AWS + Amazon RDS).">
+  <meta name="theme-color" content="#0a0f1d">
+  <title>Excavadora IoT · Control, Monitoreo y Administración</title>
 
   <!-- Tema guardado antes de pintar (evita parpadeo claro/oscuro) -->
   <script>
@@ -27,28 +27,33 @@
         integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
   <link rel="stylesheet" href="./assets/css/styles.css">
+  <link rel="stylesheet" href="./assets/css/admin.css">
 </head>
-<body>
+<body data-role="none">
   <a class="skip-link" href="#main">Saltar al contenido</a>
 
-  <!-- ===== Encabezado: marca, indicadores, navegación y tema ===== -->
+  <!-- ===== Encabezado: marca/unidad, indicadores, navegación por rol, usuario y tema ===== -->
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
         <img src="./assets/img/favicon.svg" alt="" width="34" height="34" class="brand-logo">
         <div class="brand-text">
-          <span class="brand-kicker">Vehículo #<span id="vehicle-id">1</span></span>
+          <span class="brand-kicker" id="unit-kicker">Plataforma IoT</span>
           <h1 class="brand-name" id="vehicle-name">Excavadora IoT</h1>
+          <label class="unit-picker" id="unit-picker" hidden>
+            <span class="visually-hidden">Unidad activa</span>
+            <select id="unit-select" aria-label="Unidad activa"></select>
+          </label>
         </div>
       </div>
 
       <!-- Tres indicadores independientes y verificados -->
       <section class="status-strip" aria-label="Estado de conectividad">
-        <button type="button" class="status-chip" id="ind-ws" data-state="wait"
+        <button type="button" class="status-chip" id="ind-ws" data-state="none"
                 title="Sesión WSS de este navegador con el servidor. No indica que el vehículo físico esté conectado. Pulsa para reconectar.">
           <i class="bi bi-broadcast status-icon" aria-hidden="true"></i>
           <span class="status-label">WebSocket WSS</span>
-          <span class="status-value" aria-live="polite">Conectando…</span>
+          <span class="status-value" aria-live="polite">Sin sesión</span>
         </button>
         <div class="status-chip" id="ind-api" data-state="wait"
              title="Servidor AWS: responde la operación de salud /health. No garantiza que las 21 operaciones funcionen.">
@@ -66,13 +71,30 @@
 
       <div class="topbar-actions">
         <nav class="viewnav" aria-label="Secciones de la aplicación">
-          <a class="viewnav-link" href="#control" data-view="control" aria-current="page">
+          <a class="viewnav-link" href="#inicio" data-view="inicio" data-roles="none INVITADO">
+            <i class="bi bi-shop" aria-hidden="true"></i><span>Catálogo</span>
+          </a>
+          <a class="viewnav-link" href="#control" data-view="control" data-roles="ADMIN USUARIO INVITADO">
             <i class="bi bi-controller" aria-hidden="true"></i><span>Control</span>
           </a>
-          <a class="viewnav-link" href="#monitoreo" data-view="monitoreo">
+          <a class="viewnav-link" href="#monitoreo" data-view="monitoreo" data-roles="ADMIN USUARIO">
             <i class="bi bi-activity" aria-hidden="true"></i><span>Monitoreo</span>
           </a>
+          <a class="viewnav-link" href="#admin" data-view="admin" data-roles="ADMIN USUARIO">
+            <i class="bi bi-sliders" aria-hidden="true"></i><span id="admin-label">Administración</span>
+          </a>
         </nav>
+        <div class="user-menu" id="user-menu" hidden>
+          <button type="button" class="user-btn" id="user-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="user-pop">
+            <span class="user-avatar" id="user-avatar" aria-hidden="true">?</span>
+            <span class="visually-hidden">Menú de usuario</span>
+          </button>
+          <div class="user-pop" id="user-pop" role="menu" hidden>
+            <p class="user-name" id="user-name">—</p>
+            <p class="user-role" id="user-role">—</p>
+            <button type="button" class="user-logout" id="btn-logout" role="menuitem"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Cerrar sesión</button>
+          </div>
+        </div>
         <button type="button" class="theme-btn" id="theme-toggle" aria-pressed="false" aria-label="Activar modo claro" title="Cambiar a modo claro">
           <i class="bi bi-sun-fill" aria-hidden="true"></i>
         </button>
@@ -82,8 +104,50 @@
 
   <main id="main" class="app-main" tabindex="-1">
 
+    <!-- ===================== INICIO · Catálogo público, login e Invitado ===================== -->
+    <section id="view-inicio" class="view view--inicio" aria-labelledby="inicio-title" hidden>
+      <div class="landing">
+        <div class="landing-hero">
+          <span class="eyebrow-pill"><i class="bi bi-stars" aria-hidden="true"></i> Prueba nuestros vehículos IoT</span>
+          <h2 id="inicio-title" class="landing-title">Maquinaria a escala, controlada desde la nube</h2>
+          <p class="landing-sub">Explora el catálogo y prueba una unidad de exhibición en una sesión temporal, o entra con tu cuenta para operar tus vehículos.</p>
+          <div class="catalog" id="catalog" aria-live="polite">
+            <p class="muted">Cargando catálogo…</p>
+          </div>
+        </div>
+
+        <aside class="landing-side">
+          <!-- Sin sesión: login -->
+          <form class="panel auth-card" id="login-form" novalidate data-when="none">
+            <h3 class="panel-title"><i class="bi bi-person-lock" aria-hidden="true"></i> Iniciar sesión</h3>
+            <label class="field">
+              <span>Correo</span>
+              <input type="email" id="login-email" autocomplete="username" required maxlength="120" inputmode="email">
+            </label>
+            <label class="field">
+              <span>Contraseña</span>
+              <input type="password" id="login-pass" autocomplete="current-password" required maxlength="200">
+            </label>
+            <p class="form-error" id="login-error" role="alert" hidden></p>
+            <button type="submit" class="btn-primary" id="login-submit"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Entrar</button>
+            <div class="divider"><span>o</span></div>
+            <button type="button" class="btn-ghost w-100" id="guest-btn"><i class="bi bi-person-badge" aria-hidden="true"></i> Probar como invitado</button>
+            <p class="note">El invitado no necesita cuenta: obtiene una sesión temporal con comandos limitados.</p>
+          </form>
+
+          <!-- Invitado: reservar unidad de exhibición -->
+          <div class="panel guest-card" id="guest-card" data-when="INVITADO" hidden>
+            <h3 class="panel-title"><i class="bi bi-hourglass-split" aria-hidden="true"></i> Tu prueba</h3>
+            <div id="guest-reserva" aria-live="polite"></div>
+            <ul class="exhib-list" id="exhib-list"></ul>
+            <p class="note">Una sola persona controla cada unidad. Al terminar el tiempo, la unidad se detiene y se libera.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
     <!-- ===================== VISTA CONTROL ===================== -->
-    <section id="view-control" class="view view--control" aria-labelledby="control-title">
+    <section id="view-control" class="view view--control" aria-labelledby="control-title" hidden>
       <h2 id="control-title" class="visually-hidden">Control del vehículo</h2>
 
       <div class="control-grid">
@@ -103,9 +167,21 @@
           <span id="drive-help" class="visually-hidden">Con el foco en la palanca usa las flechas o W A S D. Mientras la mantengas, el movimiento continúa. Al soltar se envía DETENER.</span>
         </div>
 
-        <!-- Centro: DETENER, funciones y DEMO -->
+        <!-- Centro: estado de unidad, DETENER, funciones y DEMO -->
         <div class="center-cell">
-          <button type="button" class="btn-stop" id="btn-stop" aria-keyshortcuts="Escape Space" title="Detener (Esc o Espacio)">
+          <div class="unit-strip" aria-live="polite">
+            <span class="mini-chip" id="chip-device" data-s="none" title="Señal propia del ESP8266 (canal de dispositivo autenticado)">
+              <i class="bi bi-cpu" aria-hidden="true"></i><span>Vehículo físico: sin señal</span>
+            </span>
+            <span class="mini-chip" id="chip-gamepad" data-s="none" title="Conecta un control (GameSir, Xbox…) por USB o Bluetooth y pulsa un botón">
+              <i class="bi bi-controller" aria-hidden="true"></i><span>Sin control</span>
+            </span>
+            <span class="mini-chip" id="chip-guest" data-s="none" hidden>
+              <i class="bi bi-stopwatch" aria-hidden="true"></i><span id="guest-timer">--:--</span>
+            </span>
+          </div>
+
+          <button type="button" class="btn-stop" id="btn-stop" aria-keyshortcuts="Escape Space" title="Detener (Esc o Espacio · botón B del control)">
             <i class="bi bi-stop-circle-fill" aria-hidden="true"></i>
             <span>Detener</span>
           </button>
@@ -164,6 +240,8 @@
           <span id="arm-help" class="visually-hidden">Con el foco en la palanca usa las flechas o I J K L. Arriba sube el brazo, abajo lo baja, izquierda abre la pala, derecha la cierra. Mientras la mantengas, el movimiento continúa. Al soltar se envía DETENER.</span>
         </div>
       </div>
+
+      <div class="access-banner" id="control-banner" role="alert" hidden></div>
     </section>
 
     <!-- ===================== VISTA MONITOREO ===================== -->
@@ -223,6 +301,13 @@
         <p class="note">Individuales persistidos en RDS. Los pasos internos de una DEMO no se guardan aquí.</p>
       </article>
     </section>
+
+    <!-- ===================== VISTA ADMINISTRACIÓN / MI CUENTA ===================== -->
+    <section id="view-admin" class="view view--admin" aria-labelledby="admin-title" hidden>
+      <h2 id="admin-title" class="visually-hidden">Administración</h2>
+      <nav class="admin-tabs" id="admin-tabs" role="tablist" aria-label="Secciones de administración"></nav>
+      <div class="admin-body" id="admin-body" role="tabpanel" tabindex="0"></div>
+    </section>
   </main>
 
   <footer class="app-footer">
@@ -230,6 +315,7 @@
   </footer>
 
   <div class="toast-zone" id="toast-zone" role="status" aria-live="polite"></div>
+  <dialog class="modal-dlg" id="modal" aria-labelledby="modal-title"></dialog>
 
   <script type="module" src="./assets/js/app.js"></script>
 </body>

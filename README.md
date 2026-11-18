@@ -1,13 +1,33 @@
-# Excavadora IoT · CONTROL + MONITOREO
+# Excavadora IoT · CONTROL + MONITOREO + ADMINISTRACIÓN
 
-Aplicación web (Prácticas 4.1 y 4.2) para **controlar** y **monitorear en tiempo real** la Excavadora IoT.
-Consume la API existente en AWS (FastAPI + 21 procedimientos almacenados + Amazon RDS) y su canal WebSocket seguro.
+Plataforma web (Prácticas 4.1, 4.2 y 4.3) para **controlar**, **monitorear en tiempo real** y **administrar comercialmente** vehículos IoT.
+Consume la API en AWS (FastAPI + 21 procedimientos almacenados + Amazon RDS) y su canal WebSocket seguro.
 
 - **Sitio:** https://margt002.github.io/excavadora-control-frontend/
 - **Repositorio:** https://github.com/MarGT002/excavadora-control-frontend
-- **API:** https://appt1.deguel.site (Swagger: `/docs`) · **WSS:** `wss://appt1.deguel.site/ws/vehiculos/1`
+- **API:** https://appt1.deguel.site (Swagger: `/docs`) · **WSS:** `wss://appt1.deguel.site/ws/vehiculos/{id}?token=…`
+- Diseño de datos, migraciones y matriz de pruebas 4.3: repositorio `vehiculo_iot` → `docs/`.
 
 Desarrollado por **Mario García Terrazas** · 2026
+
+## 4.3 · Roles y vistas
+
+| Rol | Entra con | Vistas |
+|---|---|---|
+| **Administrador** (empresa) | Correo y contraseña | Administración (Panel con métricas reales, Unidades, Modelos, Clientes, Demos de fábrica, Auditoría), Control y Monitoreo de unidades no vendidas o con soporte autorizado |
+| **Usuario** (comprador) | Correo y contraseña | Control y Monitoreo de **sus** unidades (selector en el encabezado), Mi cuenta (Mis vehículos + autorizar soporte, Mis demos con editor) |
+| **Invitado** (prospecto) | «Probar como invitado» | Catálogo público y Control limitado de una unidad de exhibición durante 3 min (cuenta regresiva) |
+
+Los menús se adaptan al rol, pero **la seguridad está en el backend**: cada petición REST y la suscripción WSS se autorizan por rol y por unidad.
+El token de sesión vive en `sessionStorage` (se borra al cerrar la pestaña) y nunca en el código.
+
+**Unidad activa.** Al cambiar de unidad se cierra la suscripción WSS anterior, se recargan comandos y demos, y Monitoreo se reinicia (sin mezclar datos de otra unidad).
+
+**Control físico (GameSir / Xbox / PlayStation).** Conéctalo por USB o Bluetooth a la computadora o al celular y pulsa un botón:
+stick izquierdo/cruceta = orugas · stick derecho = brazo y pala · **B = DETENER** · A = luces · X = encender · Y = bocina.
+Sigue las mismas reglas que las palancas en pantalla (envío continuo mientras se sostiene, DETENER al soltar). En el GameSir usa el modo XInput/Xbox.
+
+**Vehículo físico en línea.** El chip «Vehículo físico» refleja la conexión real del ESP8266 por su canal autenticado (no la del navegador).
 
 ---
 
@@ -43,14 +63,14 @@ GitHub Pages (HTML5 + CSS3 + Bootstrap 5 + ES Modules)
 ```
 index.html
 assets/
-  css/styles.css
+  css/styles.css · admin.css
   img/favicon.svg · favicon-32.png · apple-touch-icon.png
   js/app.js · config.js
      services/ http.js · api.js · ws.js
-     core/     store.js · catalog.js · command-service.js · demo-service.js · toggle-state.js · connectivity.js
-     ui/       joystick.js · indicators.js · toast.js · theme.js
-     views/    router.js · control-view.js · monitor-view.js
-     utils/    format.js · validate.js
+     core/     store.js · session.js · vehicle.js · reserva.js · catalog.js · command-service.js · demo-service.js · toggle-state.js · connectivity.js
+     ui/       joystick.js · gamepad.js · indicators.js · toast.js · theme.js · modal.js · demo-editor.js
+     views/    router.js · inicio-view.js · control-view.js · monitor-view.js · admin-view.js
+     utils/    format.js · validate.js · dom.js
 ```
 
 ## Contratos usados (verificados en `/openapi.json`)

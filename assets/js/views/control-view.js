@@ -4,6 +4,9 @@ import { catalog } from '../core/catalog.js';
 import { commands } from '../core/command-service.js';
 import { demos } from '../core/demo-service.js';
 import { toggles } from '../core/toggle-state.js';
+import { session } from '../core/session.js';
+import { vehicle } from '../core/vehicle.js';
+import { gamepad } from '../ui/gamepad.js';
 import { Api } from '../services/api.js';
 import { Joystick } from '../ui/joystick.js';
 import { toast } from '../ui/toast.js';
@@ -42,6 +45,78 @@ export class ControlView {
     bus.on('cmd:owner', () => this.#syncEnabled());
     bus.on('toggles:changed', (s) => this.#renderToggles(s));
     this.#renderToggles(toggles.state);
+    this.#initUnitAndDevices();
+  }
+
+  // ---------- Unidad activa, presencia del ESP8266, control físico y tiempo de invitado ----------
+  #initUnitAndDevices() {
+    bus.on('vehicle:changed', (u) => {
+      this.releaseAll();
+      this.#banner(u ? '' : (session.isGuest ? 'Reserva una unidad de exhibición en «Catálogo» para empezar.'
+        : 'No hay una unidad seleccionada. Elige una arriba o asígnala en Administración.'));
+      this.#device(u?.dispositivo ?? null);
+      if (u) this.loadDemos(); else { this.demoList = []; $('demo-select').replaceChildren(new Option('Sin unidad', '')); this.#renderDemo(demos.state, false); }
+      this.#syncEnabled();
+    });
+    bus.on('ws:message', (m) => {
+      if (m.tipo === 'dispositivo' && m.conectado !== null) this.#device(m.conectado);
+      if (m.tipo === 'estado' && m.dispositivo !== null) this.#device(m.dispositivo);
+    });
+    bus.on('ws:denied', (d) => {
+      if (d.kind !== 'revoked') return;
+      this.releaseAll();
+      this.#banner(d.code === 4404 ? 'Esta unidad ya no está asignada a tu cuenta.'
+        : `Sin permiso sobre esta unidad${d.reason ? `: ${d.reason}` : ''}.`);
+    });
+    bus.on('ws:status', (s) => { if (s === 'ONLINE') this.#banner(''); });
+    bus.on('demos:changed', () => this.loadDemos());
+
+    // Control físico (GameSir / Xbox): mismas reglas que las palancas en pantalla.
+    bus.on('view:changed', (v) => gamepad.setEnabled(v === 'control'));
+    const padChip = ({ connected, name }) => {
+      const chip = $('chip-gamepad');
+      chip.dataset.s = connected ? 'ok' : 'none';
+      chip.querySelector('span').textContent = connected ? name : 'Sin control';
+    };
+    padChip(gamepad.info);                              // el control pudo conectarse antes de cargar la vista
+    bus.on('gamepad:status', ({ connected, name }) => {
+      padChip({ connected, name });
+      if (connected) toast(`Control conectado: ${name}`, 'ok');
+      else { this.releaseAll(); if (vehicle.current && catalog.loaded) { toast('Control desconectado: vehículo detenido', 'warn'); this.stopAll(); } }
+    });
+    bus.on('gamepad:dir', ({ stick, dir }) => {
+      if ($('view-control').hidden) return;
+      this.sticks[stick]?.setExternal(dir);
+    });
+    bus.on('gamepad:button', ({ action }) => {
+      if ($('view-control').hidden) return;
+      if (action === 'STOP') { this.stopAll(); return; }
+      const btn = this.auxButtons.find((b) => b.dataset.command === action);
+      if (btn && !btn.disabled) btn.click();
+    });
+
+    // Invitado: tiempo restante de la reserva
+    bus.on('reserva:tick', (seg) => {
+      const chip = $('chip-guest');
+      chip.hidden = seg === null;
+      if (seg === null) return;
+      const m = Math.floor(seg / 60);
+      $('guest-timer').textContent = `${m}:${String(seg % 60).padStart(2, '0')} de prueba`;
+      chip.dataset.s = seg <= 30 ? 'bad' : seg <= 60 ? 'wait' : 'ok';
+    });
+  }
+
+  #device(online) {
+    const chip = $('chip-device');
+    chip.dataset.s = online === null ? 'none' : online ? 'ok' : 'bad';
+    chip.querySelector('span').textContent = online === null ? 'Vehículo físico: sin datos'
+      : online ? 'Vehículo físico: en línea' : 'Vehículo físico: sin señal';
+  }
+
+  #banner(text) {
+    const b = $('control-banner');
+    b.hidden = !text;
+    b.textContent = text || '';
   }
 
   /** Suelta ambas palancas (al cambiar de vista, iniciar DEMO o pulsar DETENER). */
@@ -58,7 +133,9 @@ export class ControlView {
       const stick = new Joystick($(cfg.el), {
         keys: cfg.keys,
         canStart: () => {
+          if (!vehicle.current) { toast('Selecciona una unidad primero', 'warn'); return false; }
           if (!catalog.loaded) { toast('Catálogo de comandos aún no disponible', 'warn'); return false; }
+          if (!Object.values(cfg.map).some((c) => catalog.has(c))) { toast('Esta palanca no está disponible para esta unidad o sesión', 'warn'); return false; }
           if (appState.demoRunning) { toast('DEMO en curso: cancélala o pulsa DETENER', 'warn'); return false; }
           if (!commands.claim(owner)) { toast('La otra palanca está en uso', 'warn'); return false; }
           return true;
@@ -132,7 +209,8 @@ export class ControlView {
       b.disabled = !catalog.has(b.dataset.command) || demoOn || Boolean(owner);
     });
     for (const [name, stick] of Object.entries(this.sticks)) {
-      const blocked = demoOn || !catalog.loaded || (owner && owner !== name);
+      const sinComandos = !Object.values(STICKS[name].map).some((c) => catalog.has(c));
+      const blocked = demoOn || !catalog.loaded || sinComandos || (owner && owner !== name);
       stick.el.classList.toggle('is-locked', Boolean(blocked));
       stick.el.setAttribute('aria-disabled', String(Boolean(blocked)));
     }
@@ -186,10 +264,14 @@ export class ControlView {
 
   async loadDemos() {
     const select = $('demo-select');
+    const forVehicle = vehicle.current?.id;
+    if (!forVehicle) return;
     try {
-      this.demoList = (await Api.demos()).filter((d) => d.activo);
+      const list = (await Api.demos()).filter((d) => d.activo);
+      if (forVehicle !== vehicle.current?.id) return;          // respuesta de una unidad anterior
+      this.demoList = list;
       const opts = this.demoList.length
-        ? [new Option('Selecciona una DEMO…', ''), ...this.demoList.map((d) => new Option(d.nombre, String(d.id)))]
+        ? [new Option('Selecciona una DEMO…', ''), ...this.demoList.map((d) => new Option(`${d.nombre}${d.tipo === 'PRIVADA' ? ' · mía' : ''}`, String(d.id)))]
         : [new Option('No hay DEMO registradas', '')];
       select.replaceChildren(...opts);                  // Option() usa texto plano: sin inyección HTML
       if (this.demoList.length === 1) select.value = String(this.demoList[0].id);

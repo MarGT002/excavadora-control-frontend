@@ -8,7 +8,8 @@ const MAP = {
     CONNECTING: ['wait', 'bi-arrow-repeat', 'Conectando…'],
     RECONNECTING: ['wait', 'bi-arrow-repeat', 'Reconectando…'],
     ONLINE: ['ok', 'bi-broadcast', 'En línea'],
-    OFFLINE: ['bad', 'bi-x-circle', 'Desconectado']
+    OFFLINE: ['bad', 'bi-x-circle', 'Desconectado'],
+    IDLE: ['none', 'bi-dash-circle', 'Sin unidad']
   },
   api: {
     CHECKING: ['wait', 'bi-arrow-repeat', 'Comprobando…'],
