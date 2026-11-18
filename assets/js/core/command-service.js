@@ -93,7 +93,7 @@ class CommandService {
     bus.emit('cmd:trace', { seq, name: cmd.nombre, phase: 'requested' });
 
     try {
-      await Api.movimiento(cmd.id);
+      await Api.movimiento(cmd.id, CONFIG.ORIGEN);
       // Una respuesta tardía de un movimiento previo a DETENER no vuelve a "activar" la UI.
       if (isStop || gen === this.#gen) bus.emit('cmd:trace', { seq, name: cmd.nombre, phase: 'accepted' });
       else bus.emit('cmd:trace', { seq, name: cmd.nombre, phase: 'superseded' });

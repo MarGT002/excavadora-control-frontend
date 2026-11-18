@@ -1,4 +1,9 @@
 import { CONFIG } from '../config.js';
+import { bus } from '../core/store.js';
+
+/** Token de sesión en memoria (lo fija core/session.js). Nunca se escribe en el código ni en el repositorio. */
+let authToken = null;
+export function setAuthToken(t) { authToken = t || null; }
 
 /** Error HTTP/red normalizado con mensaje apto para el usuario (sin trazas internas). */
 export class ApiError extends Error {
@@ -18,6 +23,7 @@ const FRIENDLY = {
   404: 'No encontrado',
   409: 'Conflicto: operación en curso',
   422: 'Datos no válidos',
+  429: 'Demasiadas solicitudes, espera un momento',
   500: 'Error interno del servidor',
   502: 'Servidor no disponible',
   503: 'Servicio no disponible',
@@ -30,7 +36,7 @@ const FRIENDLY = {
  * @param {string} path ruta relativa (de route())
  * @param {{method?:string, body?:object, timeout?:number, signal?:AbortSignal}} opts
  */
-export async function request(path, { method = 'GET', body, timeout = CONFIG.TIMEOUT_MS, signal } = {}) {
+export async function request(path, { method = 'GET', body, timeout = CONFIG.TIMEOUT_MS, signal, auth = true } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), timeout);
   const onExternalAbort = () => controller.abort('abort');
@@ -40,7 +46,11 @@ export async function request(path, { method = 'GET', body, timeout = CONFIG.TIM
   try {
     res = await fetch(`${CONFIG.API_BASE_URL}${path}`, {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json', Accept: 'application/json' } : { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(auth && authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
       cache: 'no-store',
@@ -68,6 +78,8 @@ export async function request(path, { method = 'GET', body, timeout = CONFIG.TIM
   }
 
   if (!res.ok) {
+    // 401 con sesión abierta = token expirado o revocado: la app vuelve al inicio de sesión.
+    if (res.status === 401 && auth && authToken) bus.emit('auth:expired');
     // FastAPI devuelve {"detail": "..."}; solo se usa si es texto simple.
     const detail = typeof data?.detail === 'string' ? data.detail.slice(0, 160) : null;
     throw new ApiError(detail || FRIENDLY[res.status] || `Error HTTP ${res.status}`,

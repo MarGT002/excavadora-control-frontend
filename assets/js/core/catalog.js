@@ -1,3 +1,4 @@
+import { active } from '../config.js';
 import { Api } from '../services/api.js';
 import { bus } from './store.js';
 
@@ -11,8 +12,17 @@ class Catalog {
   #byId = new Map();
   loaded = false;
 
+  reset() {
+    this.#byName.clear();
+    this.#byId.clear();
+    this.loaded = false;
+    bus.emit('catalog:loaded', this);
+  }
+
   async load() {
+    const forVehicle = active.vehicleId;
     const list = await Api.comandos();
+    if (forVehicle !== active.vehicleId) return this;       // respuesta de una unidad anterior: se descarta
     this.#byName.clear();
     this.#byId.clear();
     list.filter((c) => c.activo).forEach((c) => { this.#byName.set(c.nombre, c); this.#byId.set(c.id, c); });
