@@ -95,7 +95,7 @@ export class InicioView {
     this.#error('login-error', '');
     const email = $('login-email').value.trim();
     const pass = $('login-pass').value;
-    if (!email || !pass) { this.#error('login-error', 'Escribe tu correo y contraseña.'); return; }
+    if (!email || !pass) { this.#error('login-error', 'Escribe tu correo (o usuario) y contraseña.'); return; }
     await this.#busy('login-submit', async () => {
       try {
         await session.login(email, pass);
@@ -107,7 +107,7 @@ export class InicioView {
           this.#error('verify-error', 'Tu correo aún no está verificado. Ingresa el código que te enviamos.');
           return;
         }
-        this.#error('login-error', e.status === 401 ? 'Correo o contraseña incorrectos.' : e.message);
+        this.#error('login-error', e.status === 401 ? 'Usuario o contraseña incorrectos.' : e.message);
       }
     });
   }
