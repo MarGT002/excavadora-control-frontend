@@ -10,7 +10,9 @@ import { gamepad } from '../ui/gamepad.js';
 import { Api } from '../services/api.js';
 import { Joystick } from '../ui/joystick.js';
 import { toast } from '../ui/toast.js';
+import { confirmDialog } from '../ui/modal.js';
 import { commandLabel } from '../utils/format.js';
+import { el } from '../utils/dom.js';
 
 const C = CONFIG.COMMANDS;
 const $ = (id) => document.getElementById(id);
@@ -29,6 +31,9 @@ const STICKS = {
   }
 };
 
+const ESTADOS = { DISPONIBLE: 'Disponible', VENDIDO: 'Vendida', EXHIBICION: 'Exhibición', INACTIVO: 'Inactiva' };
+const LONG_PRESS_MS = 650;
+
 const PHASE_TEXT = { requested: 'solicitado', accepted: 'aceptado por API', event: 'evento WSS recibido', error: 'error' };
 
 export class ControlView {
@@ -46,14 +51,84 @@ export class ControlView {
     bus.on('toggles:changed', (s) => this.#renderToggles(s));
     this.#renderToggles(toggles.state);
     this.#initUnitAndDevices();
+    this.#initUnitSwitch();
+  }
+
+  // ---------- Selector de carrito dentro de CONTROL ----------
+  #initUnitSwitch() {
+    const sel = $('control-unit');
+    sel.addEventListener('change', () => {
+      if (vehicle.current && catalog.loaded) this.stopAll();   // nunca dejar en movimiento la unidad que se abandona
+      vehicle.select(sel.value);
+    });
+    $('btn-link-esp').addEventListener('click', () => this.#linkEsp());
+    bus.on('vehicles:list', () => this.#renderUnitSwitch());
+    bus.on('vehicle:changed', () => this.#renderUnitSwitch());
+    bus.on('view:changed', (v) => {
+      if (v === 'control' && (session.isAdmin || session.isUser)) vehicle.refreshList().catch(() => {});
+    });
+    // El ESP llega/se va de la unidad activa: refresca la lista para que el selector muestre dónde está.
+    bus.on('ws:message', (m) => {
+      if (m.tipo === 'dispositivo' && m.conectado !== null && session.isAdmin && !$('view-control').hidden) {
+        clearTimeout(this.listTimer);
+        this.listTimer = setTimeout(() => vehicle.refreshList().catch(() => {}), 600);
+      }
+    });
+  }
+
+  #renderUnitSwitch() {
+    const box = $('unit-switch');
+    const list = vehicle.list;
+    const show = (session.isAdmin && list.length > 0) || (session.isUser && list.length > 1);
+    box.hidden = !show;
+    if (!show) return;
+    const sel = $('control-unit');
+    sel.replaceChildren(...list.map((u) => el('option', { value: u.id },
+      `${u.dispositivo ? '● ' : ''}${u.codigo} · ${u.modelo || u.nombre}${session.isAdmin ? ` · ${ESTADOS[u.estado] ?? u.estado}` : ''}`)));
+    if (vehicle.current) sel.value = String(vehicle.current.id);
+    sel.title = 'El punto ● indica la unidad donde está conectado el ESP8266 (carrito físico)';
+    // Admin: si el carrito físico está ligado a OTRA unidad, ofrecer traerlo a la seleccionada.
+    const cur = vehicle.current;
+    const holder = session.isAdmin && cur && !cur.tieneClave ? this.#espHolder(cur.id) : null;
+    const btn = $('btn-link-esp');
+    btn.hidden = !holder || cur.estado === 'INACTIVO';
+    if (holder) btn.querySelector('span').textContent = `Traer ESP de ${holder.codigo}`;
+  }
+
+  /** Unidad que hoy tiene la clave del ESP: preferentemente la que está en línea. */
+  #espHolder(exceptId) {
+    const con = vehicle.list.filter((u) => u.tieneClave && u.id !== exceptId);
+    return con.find((u) => u.dispositivo) ?? (con.length === 1 ? con[0] : null);
+  }
+
+  async #linkEsp() {
+    const cur = vehicle.current;
+    const holder = cur && this.#espHolder(cur.id);
+    if (!holder) return;
+    const ok = await confirmDialog('Vincular carrito físico',
+      `El ESP8266 que hoy responde como ${holder.codigo} pasará a ${cur.codigo}. ${holder.codigo} se detendrá y quedará sin dispositivo. `
+      + 'No hay que cambiar el firmware: el carrito se reconecta solo en unos segundos.', { ok: 'Vincular' });
+    if (!ok) return;
+    const btn = $('btn-link-esp');
+    btn.disabled = true;
+    try {
+      const r = await Api.transferirDispositivo(holder.id, cur.id);
+      toast(r.mensaje || 'Dispositivo vinculado', 'ok', 5000);
+      await vehicle.refreshList();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   // ---------- Unidad activa, presencia del ESP8266, control físico y tiempo de invitado ----------
   #initUnitAndDevices() {
     bus.on('vehicle:changed', (u) => {
       this.releaseAll();
-      this.#banner(u ? '' : (session.isGuest ? 'Reserva una unidad de exhibición en «Catálogo» para empezar.'
-        : 'No hay una unidad seleccionada. Elige una arriba o asígnala en Administración.'));
+      this.#banner(u ? '' : session.isGuest ? 'Reserva una unidad de exhibición en «Catálogo» para empezar.'
+        : session.isUser ? 'Aún no tienes vehículos asignados. Cuando la empresa te asigne uno, aparecerá aquí.'
+          : 'No hay una unidad seleccionada. Elige una arriba o regístrala en Administración.');
       this.#device(u?.dispositivo ?? null);
       if (u) this.loadDemos(); else { this.demoList = []; $('demo-select').replaceChildren(new Option('Sin unidad', '')); this.#renderDemo(demos.state, false); }
       this.#syncEnabled();
@@ -176,10 +251,33 @@ export class ControlView {
 
     this.auxButtons.forEach((btn) => {
       btn.addEventListener('click', () => {
+        if (btn.dataset.longPressed) { delete btn.dataset.longPressed; return; }   // fue una corrección manual
         btn.dataset.s = 'sending';
         commands.send(btn.dataset.command, { source: 'button' });
       });
+      if (btn.dataset.toggle) this.#initManualFix(btn);
     });
+  }
+
+  /**
+   * Corrección del indicador ON/OFF sin enviar comando: mantener presionado (táctil o ratón) o clic derecho.
+   * Útil si el carrito se reinició o se operó sin la app y el indicador quedó invertido.
+   */
+  #initManualFix(btn) {
+    let timer = null;
+    const fix = () => {
+      toggles.flip(btn.dataset.toggle);
+      const on = toggles.state[btn.dataset.toggle];
+      toast(`Indicador de ${commandLabel(btn.dataset.command)} corregido a ${on ? 'ON' : 'OFF'} (no se envió comando)`, 'info');
+      navigator.vibrate?.(30);
+    };
+    btn.addEventListener('pointerdown', (e) => {
+      delete btn.dataset.longPressed;
+      if (e.button !== 0 || btn.disabled) return;
+      timer = setTimeout(() => { timer = null; btn.dataset.longPressed = '1'; fix(); }, LONG_PRESS_MS);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => btn.addEventListener(t, () => { clearTimeout(timer); timer = null; }));
+    btn.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!btn.disabled) fix(); });
   }
 
   /** DETENER: prioridad absoluta. Suelta palancas, cancela la DEMO (si corre) y envía DETENER. */
@@ -198,7 +296,8 @@ export class ControlView {
       if (!key) return;
       const on = Boolean(s[key]);
       b.setAttribute('aria-pressed', String(on));
-      b.title = `${catalog.get(b.dataset.command)?.descripcion || commandLabel(b.dataset.command)} · ${on ? 'activo' : 'inactivo'} (estado estimado)`;
+      b.title = `${catalog.get(b.dataset.command)?.descripcion || commandLabel(b.dataset.command)} · ${on ? 'activo' : 'inactivo'} `
+        + '(estado estimado; mantén presionado o clic derecho para corregir el indicador sin enviar comando)';
     });
   }
 

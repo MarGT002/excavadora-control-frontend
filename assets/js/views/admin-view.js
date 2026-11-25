@@ -78,6 +78,7 @@ export class AdminView {
     const [unidades, modelos, clientes] = await Promise.all([Api.unidades(filtros), Api.modelos(), Api.clientes()]);
     this.modelosCache = modelos;
     this.clientesCache = clientes;
+    this.unidadesCache = unidades;
     const q = el('input', { type: 'search', placeholder: 'Buscar código, cliente…', value: filtros.q || '', 'aria-label': 'Buscar unidad', maxlength: 60 });
     const est = el('select', { 'aria-label': 'Filtrar por estado' }, el('option', { value: '' }, 'Todos los estados'),
       Object.entries(ESTADOS).map(([k, [l]]) => el('option', { value: k, selected: filtros.estado === k }, l)));
@@ -111,6 +112,7 @@ export class AdminView {
       u.estado !== 'DISPONIBLE' ? b(u.estado === 'INACTIVO' ? 'Reactivar' : 'Liberar', 'bi-box-arrow-left', () => this.#liberar(u)) : null,
       b('Editar', 'bi-pencil', () => this.#editarUnidad(u)),
       b('Clave ESP', 'bi-key', () => this.#clave(u)),
+      u.tieneClave ? b('Mover ESP', 'bi-link-45deg', () => this.#moverEsp(u), { title: 'Vincular este ESP8266 a otra unidad sin cambiar el firmware' }) : null,
       u.estado !== 'VENDIDO' && u.estado !== 'INACTIVO' ? b('Operar', 'bi-controller', () => { vehicle.select(u.id); go('control'); }) : null
     ];
   }
@@ -164,6 +166,17 @@ export class AdminView {
         el('p', {}, 'Unidad: ', el('code', {}, r.codigo_unidad)), code,
         el('button', { type: 'button', class: 'btn-ghost btn-sm', onclick: () => navigator.clipboard?.writeText(r.clave_dispositivo).then(() => toast('Copiada', 'ok')) }, icon('bi-clipboard'), ' Copiar')]);
     } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async #moverEsp(u) {
+    const destinos = (this.unidadesCache || vehicle.list).filter((x) => x.id !== u.id && x.estado !== 'INACTIVO');
+    if (!destinos.length) { toast('No hay otra unidad activa a la cual mover el dispositivo', 'warn'); return; }
+    const r = await formDialog(`Mover el ESP8266 de ${u.codigo}`, [
+      { name: 'id_destino', label: 'Unidad destino', type: 'select',
+        options: destinos.map((x) => ({ value: x.id, label: `${x.codigo} · ${x.modelo || x.nombre} · ${ESTADOS[x.estado]?.[0] ?? x.estado}` })),
+        help: `${u.codigo} se detendrá y quedará sin dispositivo. El carrito se reconecta solo (misma clave, sin recompilar).` }
+    ], { submit: 'Mover', onSubmit: (v) => Api.transferirDispositivo(u.id, v.id_destino) });
+    if (r) { toast(r.mensaje || 'Dispositivo vinculado', 'ok', 5000); this.#afterUnitChange(); }
   }
 
   async #afterUnitChange() {
@@ -229,7 +242,8 @@ export class AdminView {
       clientes.length ? el('div', { class: 'table-wrap' }, el('table', { class: 'data-table' },
         el('thead', {}, el('tr', {}, ['Nombre', 'Correo', 'Teléfono', 'Unidades', 'Estado', 'Acciones'].map((h) => el('th', { scope: 'col' }, h)))),
         el('tbody', {}, clientes.map((c) => el('tr', {},
-          el('td', {}, c.nombre), el('td', { class: 'mono' }, c.email), el('td', {}, c.telefono || '—'), el('td', {}, String(c.unidades ?? 0)),
+          el('td', {}, c.nombre, c.email_verificado === 0 ? el('small', { class: 'tag tag--mini', dataset: { s: 'running' }, title: 'Se registró pero aún no confirma su correo' }, 'sin verificar') : null),
+          el('td', { class: 'mono' }, c.email), el('td', {}, c.telefono || '—'), el('td', {}, String(c.unidades ?? 0)),
           el('td', {}, el('span', { class: 'tag', dataset: { s: c.activo ? 'rest' : 'error' } }, c.activo ? 'Activo' : 'Desactivado')),
           el('td', { class: 'row-actions' },
             el('button', { type: 'button', class: 'btn-sm btn-ghost', onclick: () => this.#editarCliente(c) }, icon('bi-pencil'), ' Editar'),

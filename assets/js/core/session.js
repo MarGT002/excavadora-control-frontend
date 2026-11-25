@@ -34,7 +34,15 @@ class Session {
   }
 
   async login(email, password) {
-    const r = await Api.login(email.trim(), password);
+    this.#adopt(await Api.login(email.trim(), password));
+  }
+
+  /** Paso 2 del registro: el código correcto abre la sesión directamente. */
+  async verify(email, code) {
+    this.#adopt(await Api.verificar(email.trim().toLowerCase(), code));
+  }
+
+  #adopt(r) {
     this.#set(r.token, r.usuario);
     bus.emit('session:changed', this.user);
   }

@@ -15,11 +15,15 @@ Desarrollado por **Mario García Terrazas** · 2026
 | Rol | Entra con | Vistas |
 |---|---|---|
 | **Administrador** (empresa) | Correo y contraseña | Administración (Panel con métricas reales, Unidades, Modelos, Clientes, Demos de fábrica, Auditoría), Control y Monitoreo de unidades no vendidas o con soporte autorizado |
-| **Usuario** (comprador) | Correo y contraseña | Control y Monitoreo de **sus** unidades (selector en el encabezado), Mi cuenta (Mis vehículos + autorizar soporte, Mis demos con editor) |
+| **Usuario** (comprador) | Correo y contraseña. **Puede crear su cuenta** (pestaña «Crear cuenta»): nombre, correo, teléfono opcional y contraseña; recibe un código de 6 dígitos por correo y al ingresarlo entra directo | Control y Monitoreo de **sus** unidades (selector «Carrito» si tiene más de una), Mi cuenta (Mis vehículos + autorizar soporte, Mis demos con editor) |
 | **Invitado** (prospecto) | «Probar como invitado» | Catálogo público y Control limitado de una unidad de exhibición durante 3 min (cuenta regresiva) |
 
 Los menús se adaptan al rol, pero **la seguridad está en el backend**: cada petición REST y la suscripción WSS se autorizan por rol y por unidad.
 El token de sesión vive en `sessionStorage` (se borra al cerrar la pestaña) y nunca en el código.
+
+**Selector «Carrito» en CONTROL.** El Administrador elige cualquier unidad del inventario; el Usuario solo las suyas. El punto ● marca dónde está conectado el ESP8266. Si el carrito físico está ligado a otra unidad, el Admin pulsa **Traer ESP de …** y el ESP se reconecta solo a la unidad elegida (sin cambiar el firmware). En Administración → Unidades está la misma acción como **Mover ESP**.
+
+**Acceso minimalista.** Sin sesión solo se ve una tarjeta con «Iniciar sesión / Crear cuenta» y el enlace «Probar sin cuenta» (invitado). El catálogo de modelos aparece al entrar como invitado. El modo claro usa fondo lavanda con encabezado, pie y palancas en morado profundo / azul marino.
 
 **Unidad activa.** Al cambiar de unidad se cierra la suscripción WSS anterior, se recargan comandos y demos, y Monitoreo se reinicia (sin mezclar datos de otra unidad).
 
@@ -103,7 +107,7 @@ Reglas: un POST al **cambiar** de dirección (nunca por píxel) y reenvíos cont
 
 **Retroalimentación:** el punto junto al estado de cada palanca indica la fase: ámbar *solicitado* → azul *aceptado por API* (HTTP 201) → verde *evento WSS recibido* (rojo = error). Los botones muestran contorno ámbar mientras se envían. Ninguna fase confirma movimiento físico de los motores.
 
-**Funciones con estado:** Encender, Luces y Bocina alternan en el vehículo con cada pulso. Su estado ON/OFF se **estima** con los eventos `movimiento`/`demo_movimiento` publicados (de cualquier pestaña); al encender, las luces quedan activas. No es telemetría del dispositivo.
+**Funciones con estado:** Encender, Luces y Bocina alternan en el vehículo con cada pulso. Su estado ON/OFF se **estima** con los eventos `movimiento`/`demo_movimiento` publicados (de cualquier pestaña); al encender, las luces quedan activas. No es telemetría del dispositivo. El estado se guarda **por unidad** y arranca en OFF. Si el indicador no coincide con el carrito (p. ej. se reinició), **mantén presionado el botón o haz clic derecho**: corrige el indicador sin enviar comando.
 
 **Diseño:** la aplicación ocupa exactamente la pantalla (`100dvh`): no hay desplazamiento de página en celular vertical/horizontal, tableta ni escritorio; las palancas se dimensionan con *container queries* según el espacio disponible.
 

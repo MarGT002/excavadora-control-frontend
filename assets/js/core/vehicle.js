@@ -28,6 +28,16 @@ class VehicleContext {
     bus.emit('vehicles:list', this.list);
   }
 
+  /** Recarga la lista (p. ej. presencia del ESP) sin cambiar la unidad seleccionada. */
+  async refreshList() {
+    if (session.isAdmin) this.list = await Api.unidades();
+    else if (session.isUser) this.list = await Api.misVehiculos();
+    else return;
+    const cur = this.list.find((u) => u.id === this.current?.id);
+    if (cur) this.current = cur;
+    bus.emit('vehicles:list', this.list);
+  }
+
   /** Invitado: la unidad viene de su reserva. */
   setReserved(unit) {
     this.list = unit ? [unit] : [];

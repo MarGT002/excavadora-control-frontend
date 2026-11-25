@@ -28,6 +28,9 @@ export const CONFIG = Object.freeze({
     INVITADO: '/auth/invitado',
     ME: '/auth/me',
     LOGOUT: '/auth/logout',
+    REGISTRO: '/auth/registro',
+    VERIFICAR: '/auth/verificar',
+    REENVIAR: '/auth/reenviar-codigo',
     // --- 4.3 · público
     CATALOGO: '/catalogo/modelos',
     EXHIBICION: '/catalogo/exhibicion',
@@ -50,6 +53,7 @@ export const CONFIG = Object.freeze({
     ASIGNAR: '/admin/unidades/{id}/asignar',
     LIBERAR: '/admin/unidades/{id}/liberar',
     CLAVE_DISPOSITIVO: '/admin/unidades/{id}/clave-dispositivo',
+    TRANSFERIR_DISPOSITIVO: '/admin/unidades/{id}/dispositivo/transferir',
     CLIENTES: '/admin/clientes',
     CLIENTE: '/admin/clientes/{u}',
     AUDITORIA: '/admin/auditoria'

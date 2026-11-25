@@ -47,6 +47,9 @@ export const Api = {
   // ------------------------------------------------------------ sesión
   login: (email, password) => request(route('LOGIN'), { ...json('POST', { email, password }), auth: false }),
   invitado: () => request(route('INVITADO'), { method: 'POST', auth: false }),
+  registro: (d) => request(route('REGISTRO'), { ...json('POST', d), auth: false, timeout: 25000 }),   // incluye el envío del correo
+  verificar: (email, codigo) => request(route('VERIFICAR'), { ...json('POST', { email, codigo }), auth: false }),
+  reenviarCodigo: (email) => request(route('REENVIAR'), { ...json('POST', { email }), auth: false, timeout: 25000 }),
   me: () => request(route('ME')),
   logout: () => request(route('LOGOUT'), { method: 'POST', timeout: 4000 }),
 
@@ -148,6 +151,8 @@ export const Api = {
   asignar: (id, idUsuario) => request(route('ASIGNAR', { id }), json('POST', { id_usuario: Number(idUsuario) })),
   liberar: (id, estado) => request(route('LIBERAR', { id }), json('POST', { estado })),
   claveDispositivo: (id) => request(route('CLAVE_DISPOSITIVO', { id }), { method: 'POST' }),
+  transferirDispositivo: (idOrigen, idDestino) => request(route('TRANSFERIR_DISPOSITIVO', { id: idOrigen }),
+    json('POST', { id_destino: Number(idDestino) })),
   modelos: async () => asArray(await request(route('MODELOS'))),
   crearModelo: (d) => request(route('MODELOS'), json('POST', d)),
   actualizarModelo: (m, d) => request(route('MODELO', { m }), json('PUT', d)),

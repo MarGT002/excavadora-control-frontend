@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Plataforma IoT de la Excavadora: CONTROL, MONITOREO y ADMINISTRACIÓN (FastAPI en AWS + Amazon RDS).">
-  <meta name="theme-color" content="#0a0f1d">
+  <meta name="theme-color" content="#120e2a">
   <title>Excavadora IoT · Control, Monitoreo y Administración</title>
 
   <!-- Tema guardado antes de pintar (evita parpadeo claro/oscuro) -->
@@ -104,45 +104,94 @@
 
   <main id="main" class="app-main" tabindex="-1">
 
-    <!-- ===================== INICIO · Catálogo público, login e Invitado ===================== -->
+    <!-- ===================== INICIO · acceso (login / registro / verificación) e Invitado ===================== -->
     <section id="view-inicio" class="view view--inicio" aria-labelledby="inicio-title" hidden>
-      <div class="landing">
-        <div class="landing-hero">
-          <span class="eyebrow-pill"><i class="bi bi-stars" aria-hidden="true"></i> Prueba nuestros vehículos IoT</span>
-          <h2 id="inicio-title" class="landing-title">Maquinaria a escala, controlada desde la nube</h2>
-          <p class="landing-sub">Explora el catálogo y prueba una unidad de exhibición en una sesión temporal, o entra con tu cuenta para operar tus vehículos.</p>
-          <div class="catalog" id="catalog" aria-live="polite">
-            <p class="muted">Cargando catálogo…</p>
+      <!-- Sin sesión: tarjeta de acceso minimalista -->
+      <div class="auth-wrap" id="auth-wrap">
+        <div class="auth-box">
+          <div class="auth-brand">
+            <img src="./assets/img/favicon.svg" alt="" width="46" height="46">
+            <h2 id="inicio-title">Excavadora IoT</h2>
+            <p>Controla tu vehículo desde la nube</p>
           </div>
-        </div>
 
-        <aside class="landing-side">
-          <!-- Sin sesión: login -->
-          <form class="panel auth-card" id="login-form" novalidate data-when="none">
-            <h3 class="panel-title"><i class="bi bi-person-lock" aria-hidden="true"></i> Iniciar sesión</h3>
+          <div class="auth-tabs" role="tablist" aria-label="Acceso" id="auth-tabs">
+            <button type="button" role="tab" id="tab-login" aria-selected="true" aria-controls="login-form">Iniciar sesión</button>
+            <button type="button" role="tab" id="tab-signup" aria-selected="false" aria-controls="signup-form" tabindex="-1">Crear cuenta</button>
+          </div>
+
+          <form class="auth-form" id="login-form" role="tabpanel" aria-labelledby="tab-login" novalidate>
             <label class="field">
               <span>Correo</span>
-              <input type="email" id="login-email" autocomplete="username" required maxlength="120" inputmode="email">
+              <input type="email" id="login-email" autocomplete="username" required maxlength="120" inputmode="email" placeholder="tu@correo.com">
             </label>
             <label class="field">
               <span>Contraseña</span>
-              <input type="password" id="login-pass" autocomplete="current-password" required maxlength="200">
+              <span class="pass-wrap">
+                <input type="password" id="login-pass" autocomplete="current-password" required maxlength="200">
+                <button type="button" class="pass-eye" data-eye="login-pass" aria-label="Mostrar contraseña"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </span>
             </label>
             <p class="form-error" id="login-error" role="alert" hidden></p>
-            <button type="submit" class="btn-primary" id="login-submit"><i class="bi bi-box-arrow-in-right" aria-hidden="true"></i> Entrar</button>
-            <div class="divider"><span>o</span></div>
-            <button type="button" class="btn-ghost w-100" id="guest-btn"><i class="bi bi-person-badge" aria-hidden="true"></i> Probar como invitado</button>
-            <p class="note">El invitado no necesita cuenta: obtiene una sesión temporal con comandos limitados.</p>
+            <button type="submit" class="btn-primary" id="login-submit">Entrar</button>
           </form>
 
-          <!-- Invitado: reservar unidad de exhibición -->
-          <div class="panel guest-card" id="guest-card" data-when="INVITADO" hidden>
-            <h3 class="panel-title"><i class="bi bi-hourglass-split" aria-hidden="true"></i> Tu prueba</h3>
-            <div id="guest-reserva" aria-live="polite"></div>
-            <ul class="exhib-list" id="exhib-list"></ul>
-            <p class="note">Una sola persona controla cada unidad. Al terminar el tiempo, la unidad se detiene y se libera.</p>
-          </div>
-        </aside>
+          <form class="auth-form" id="signup-form" role="tabpanel" aria-labelledby="tab-signup" novalidate hidden>
+            <label class="field">
+              <span>Nombre completo</span>
+              <input type="text" id="su-nombre" autocomplete="name" required minlength="2" maxlength="100">
+            </label>
+            <label class="field">
+              <span>Correo</span>
+              <input type="email" id="su-email" autocomplete="email" required maxlength="120" inputmode="email" placeholder="tu@correo.com">
+            </label>
+            <label class="field">
+              <span>Teléfono <em>(opcional)</em></span>
+              <input type="tel" id="su-tel" autocomplete="tel" maxlength="30" inputmode="tel">
+            </label>
+            <label class="field">
+              <span>Contraseña</span>
+              <span class="pass-wrap">
+                <input type="password" id="su-pass" autocomplete="new-password" required minlength="8" maxlength="200" aria-describedby="su-pass-help">
+                <button type="button" class="pass-eye" data-eye="su-pass" aria-label="Mostrar contraseña"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              </span>
+              <small id="su-pass-help" class="muted">Mínimo 8 caracteres.</small>
+            </label>
+            <p class="form-error" id="signup-error" role="alert" hidden></p>
+            <button type="submit" class="btn-primary" id="signup-submit">Crear cuenta</button>
+          </form>
+
+          <form class="auth-form" id="verify-form" novalidate hidden aria-labelledby="verify-title">
+            <h3 class="verify-title" id="verify-title"><i class="bi bi-envelope-check" aria-hidden="true"></i> Revisa tu correo</h3>
+            <p class="verify-text">Enviamos un código de 6 dígitos a <b id="verify-email">—</b>.</p>
+            <label class="field">
+              <span>Código de verificación</span>
+              <input type="text" id="verify-code" class="code-input" inputmode="numeric" autocomplete="one-time-code"
+                     pattern="[0-9]{6}" maxlength="6" required placeholder="••••••">
+            </label>
+            <p class="form-error" id="verify-error" role="alert" hidden></p>
+            <button type="submit" class="btn-primary" id="verify-submit">Verificar y entrar</button>
+            <div class="verify-links">
+              <button type="button" class="link-btn" id="verify-resend">Reenviar código</button>
+              <button type="button" class="link-btn" id="verify-back">Usar otro correo</button>
+            </div>
+          </form>
+
+          <button type="button" class="guest-link" id="guest-btn">
+            <i class="bi bi-person-badge" aria-hidden="true"></i> Probar sin cuenta <i class="bi bi-arrow-right" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Invitado: elegir una unidad de exhibición -->
+      <div class="guest-wrap" id="guest-wrap" hidden>
+        <div class="panel guest-card" id="guest-card">
+          <h3 class="panel-title"><i class="bi bi-hourglass-split" aria-hidden="true"></i> Prueba una unidad</h3>
+          <div id="guest-reserva" aria-live="polite"></div>
+          <ul class="exhib-list" id="exhib-list"></ul>
+          <p class="note">Una persona por unidad. Al terminar el tiempo, la unidad se detiene y se libera.</p>
+        </div>
+        <div class="catalog" id="catalog" aria-live="polite" aria-label="Modelos disponibles"></div>
       </div>
     </section>
 
@@ -169,6 +218,16 @@
 
         <!-- Centro: estado de unidad, DETENER, funciones y DEMO -->
         <div class="center-cell">
+          <!-- Selector de carrito: Admin ve todo el inventario; Usuario solo sus unidades (si tiene más de una) -->
+          <div class="unit-switch" id="unit-switch" hidden>
+            <label for="control-unit"><i class="bi bi-truck-front" aria-hidden="true"></i><span>Carrito</span></label>
+            <select id="control-unit" aria-describedby="unit-switch-help"></select>
+            <button type="button" class="btn-link-esp" id="btn-link-esp" hidden
+                    title="Mueve el ESP8266 (carrito físico) a la unidad seleccionada sin cambiar el firmware">
+              <i class="bi bi-link-45deg" aria-hidden="true"></i><span>Vincular ESP aquí</span>
+            </button>
+            <span id="unit-switch-help" class="visually-hidden">Cambia la unidad que controlan las palancas y botones.</span>
+          </div>
           <div class="unit-strip" aria-live="polite">
             <span class="mini-chip" id="chip-device" data-s="none" title="Señal propia del ESP8266 (canal de dispositivo autenticado)">
               <i class="bi bi-cpu" aria-hidden="true"></i><span>Vehículo físico: sin señal</span>
